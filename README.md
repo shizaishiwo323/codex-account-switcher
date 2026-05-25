@@ -41,6 +41,12 @@ Path("/Users/wangbin/.codex-shizaishiwo123/auth.json")
 
 要求是这个目录里已经存在登录好的 `auth.json`。
 
+## 多账号登录与保活
+
+如果需要用多个 `CODEX_HOME` 登录不同账号，并用 `tmux` 挂后台保活，见：
+
+[MULTI_ACCOUNT_KEEPALIVE.md](MULTI_ACCOUNT_KEEPALIVE.md)
+
 ## 运行
 
 ```bash
