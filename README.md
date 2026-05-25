@@ -47,6 +47,10 @@ Path("/Users/wangbin/.codex-shizaishiwo123/auth.json")
 
 [MULTI_ACCOUNT_KEEPALIVE.md](MULTI_ACCOUNT_KEEPALIVE.md)
 
+如果需要开机自动检测并挂起 3 个仓库池账号，见：
+
+[CODEX_KEEPALIVE_LAUNCHD.md](CODEX_KEEPALIVE_LAUNCHD.md)
+
 ## 运行
 
 ```bash

@@ -3,5 +3,6 @@ __pycache__/
 .DS_Store
 .vscode/
 backups/
+logs/
 server.log
 screenshot.png
