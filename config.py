@@ -23,6 +23,12 @@ ACCOUNTS = [
         "can_switch": True,
     },
     {
+        "id": "shizaishiwo0",
+        "label": "仓库池 0",
+        "auth_path": Path("/Users/wangbin/.codex-shizaishiwo0/auth.json"),
+        "can_switch": True,
+    },
+    {
         "id": "shizaishiwo123",
         "label": "仓库池 123",
         "auth_path": Path("/Users/wangbin/.codex-shizaishiwo123/auth.json"),

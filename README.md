@@ -22,8 +22,24 @@ DEFAULT_AUTH_PATH = Path("/Users/wangbin/.codex/auth.json")
 
 ```python
 Path("/Users/wangbin/.codex-shizaishiwo323/auth.json")
+Path("/Users/wangbin/.codex-shizaishiwo0/auth.json")
 Path("/Users/wangbin/.codex-shizaishiwo123/auth.json")
 ```
+
+## 新增仓库池账号
+
+在 `config.py` 的 `ACCOUNTS` 里新增一段即可：
+
+```python
+{
+    "id": "shizaishiwo0",
+    "label": "仓库池 0",
+    "auth_path": Path("/Users/wangbin/.codex-shizaishiwo0/auth.json"),
+    "can_switch": True,
+}
+```
+
+要求是这个目录里已经存在登录好的 `auth.json`。
 
 ## 运行
 
