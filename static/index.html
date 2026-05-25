@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex 账号额度控制台</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="topbar">
+      <div>
+        <p class="eyebrow">Codex Account Switcher</p>
+        <h1>账号额度控制台</h1>
+      </div>
+      <button id="refreshBtn" class="button primary" type="button">刷新额度</button>
+    </section>
+
+    <section id="notice" class="notice hidden"></section>
+    <section id="accounts" class="grid" aria-live="polite"></section>
+  </main>
+
+  <script src="/script.js"></script>
+</body>
+</html>
