@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 import tempfile
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -11,7 +12,16 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from codex_usage import load_auth, query_usage
-from config import ACCOUNTS, BACKUP_DIR, DEFAULT_AUTH_PATH, HOST, PORT, QUERY_TIMEOUT
+from config import (
+    ACCOUNTS,
+    BACKUP_DIR,
+    CODEX_APP_BUNDLE_ID,
+    CODEX_APP_PATH,
+    DEFAULT_AUTH_PATH,
+    HOST,
+    PORT,
+    QUERY_TIMEOUT,
+)
 
 
 ROOT = Path(__file__).resolve().parent
@@ -81,22 +91,65 @@ def account_items() -> list[dict]:
     return [items_by_id[account["id"]] for account in ACCOUNTS]
 
 
+def codex_is_running() -> bool:
+    result = subprocess.run(
+        ["osascript", "-e", f'application id "{CODEX_APP_BUNDLE_ID}" is running'],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip().lower() == "true"
+
+
+def wait_for_codex_running(expected: bool, timeout: float = 20.0) -> bool:
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        if codex_is_running() is expected:
+            return True
+        time.sleep(0.5)
+    return codex_is_running() is expected
+
+
 def quit_codex() -> None:
     subprocess.run(
-        ["osascript", "-e", 'tell application "Codex" to quit'],
+        ["osascript", "-e", f'tell application id "{CODEX_APP_BUNDLE_ID}" to quit'],
         check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
+        capture_output=True,
+        text=True,
     )
+    if not wait_for_codex_running(False, timeout=20.0):
+        raise RuntimeError("Codex 桌面端没有在 20 秒内完全退出，请手动退出后重试")
 
 
-def open_codex() -> None:
-    subprocess.run(
+def run_open_command(command: list[str]) -> str | None:
+    result = subprocess.run(command, check=False, capture_output=True, text=True)
+    if result.returncode == 0:
+        return None
+    return (result.stderr or result.stdout or f"exit code {result.returncode}").strip()
+
+
+def open_codex() -> dict[str, str]:
+    attempts = [
+        ["open", "-b", CODEX_APP_BUNDLE_ID],
+        ["open", str(CODEX_APP_PATH)],
         ["open", "-a", "Codex"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
+    ]
+    errors = []
+    for command in attempts:
+        error = run_open_command(command)
+        if error:
+            errors.append(f"{' '.join(command)}: {error}")
+            continue
+        if wait_for_codex_running(True, timeout=20.0):
+            subprocess.run(
+                ["osascript", "-e", f'tell application id "{CODEX_APP_BUNDLE_ID}" to activate'],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+            return {"command": " ".join(command), "bundle_id": CODEX_APP_BUNDLE_ID}
+        errors.append(f"{' '.join(command)}: 命令成功但 20 秒内没有检测到 Codex 正在运行")
+    raise RuntimeError("Codex 桌面端启动失败：" + " | ".join(errors))
 
 
 def switch_account(target: dict) -> dict:
@@ -122,7 +175,7 @@ def switch_account(target: dict) -> dict:
         tmp_path = Path(tmp.name)
     shutil.copy2(source_path, tmp_path)
     tmp_path.replace(destination_path)
-    open_codex()
+    launch = open_codex()
 
     return {
         "switched_to": target["id"],
@@ -130,6 +183,7 @@ def switch_account(target: dict) -> dict:
         "source": str(source_path),
         "destination": str(destination_path),
         "backup": str(backup_path),
+        "launch": launch,
     }
 
 

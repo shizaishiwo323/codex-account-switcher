@@ -1,6 +1,7 @@
 __pycache__/
 *.pyc
 .DS_Store
+.vscode/
 backups/
 server.log
 screenshot.png

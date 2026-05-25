@@ -4,6 +4,8 @@ from pathlib import Path
 HOST = "127.0.0.1"
 PORT = 8765
 QUERY_TIMEOUT = 60.0
+CODEX_APP_BUNDLE_ID = "com.openai.codex"
+CODEX_APP_PATH = Path("/Applications/Codex.app")
 
 DEFAULT_AUTH_PATH = Path("/Users/wangbin/.codex/auth.json")
 
