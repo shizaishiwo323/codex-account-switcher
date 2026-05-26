@@ -52,7 +52,16 @@ h1 {
   font-weight: 760;
 }
 
+h2 {
+  margin: 0;
+  font-size: 25px;
+  font-weight: 760;
+}
+
 .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 11px 16px;
@@ -61,6 +70,9 @@ h1 {
   color: var(--ink);
   font-size: 15px;
   font-weight: 700;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
   cursor: pointer;
   transition: transform 140ms ease, background 140ms ease, border-color 140ms ease;
 }
@@ -91,6 +103,223 @@ h1 {
   gap: 16px;
 }
 
+.history {
+  margin: 0 0 18px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 18px;
+  box-shadow: 0 14px 34px rgba(33, 43, 64, 0.08);
+}
+
+.history-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.history-meta {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  margin-bottom: 14px;
+}
+
+.history-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.history-tools label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.history-tools input {
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  padding: 7px 9px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.chart-panel {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+
+.chart-panel + .chart-panel {
+  margin-top: 16px;
+}
+
+.chart-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.chart-title h3 {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.chart-title span {
+  color: var(--accent-strong);
+  font-size: 21px;
+  font-weight: 820;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-wrap {
+  position: relative;
+  min-height: 260px;
+}
+
+.chart-wrap.compact {
+  min-height: 220px;
+}
+
+.chart {
+  display: block;
+  width: 100%;
+  min-height: 260px;
+}
+
+.chart.compact {
+  min-height: 220px;
+}
+
+.chart-bg {
+  fill: #fbfcfe;
+}
+
+.chart-grid line {
+  stroke: #e5eaf2;
+  stroke-width: 1;
+}
+
+.chart-grid.x-grid line {
+  stroke-dasharray: 4 6;
+}
+
+.chart-grid text {
+  fill: #7b8492;
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.chart-axis {
+  stroke: #b9c2d0;
+  stroke-width: 1.2;
+}
+
+.chart-line {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 2.8;
+}
+
+.chart-point {
+  stroke: #fff;
+  stroke-width: 2;
+}
+
+.chart-end-label {
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-hitbox {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.chart-crosshair {
+  stroke: #111827;
+  stroke-dasharray: 4 4;
+  stroke-width: 1.2;
+  opacity: 0.8;
+}
+
+.chart-hover-dot {
+  stroke: #fff;
+  stroke-width: 2.2;
+}
+
+.chart-tooltip rect {
+  fill: #111827;
+  opacity: 0.92;
+}
+
+.chart-tooltip text {
+  fill: #fff;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.switch-marker line {
+  stroke: #1f2937;
+  stroke-dasharray: 5 5;
+  stroke-width: 1.2;
+}
+
+.switch-marker text {
+  fill: #1f2937;
+  font-size: 12px;
+  font-weight: 800;
+}
+
+.chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-weight: 760;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 14px;
+  margin-top: 8px;
+}
+
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.legend-item i {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.legend-item b {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
 .card {
   position: relative;
   display: flex;
@@ -102,6 +331,12 @@ h1 {
   background: var(--panel);
   padding: 20px;
   box-shadow: 0 14px 34px rgba(33, 43, 64, 0.08);
+}
+
+.card-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 10px;
 }
 
 .card.active {
@@ -253,6 +488,14 @@ h1 {
     align-items: stretch;
     flex-direction: column;
   }
+
+  .history-head {
+    flex-direction: column;
+  }
+
+  .history-tools {
+    justify-content: flex-start;
+  }
 }
 
 @media (max-width: 520px) {
@@ -263,6 +506,10 @@ h1 {
 
   .card {
     padding: 16px;
+  }
+
+  .history {
+    padding: 14px;
   }
 
   .usage-row {

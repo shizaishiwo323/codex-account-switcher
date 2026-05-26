@@ -17,9 +17,52 @@
     </section>
 
     <section id="notice" class="notice hidden"></section>
+
+    <section class="history">
+      <div class="history-head">
+        <div>
+          <p class="eyebrow">5小时额度</p>
+          <h2>总用量趋势</h2>
+        </div>
+        <div class="history-tools">
+          <label>
+            <span>开始</span>
+            <input id="historyStart" type="datetime-local" step="60">
+          </label>
+          <label>
+            <span>结束</span>
+            <input id="historyEnd" type="datetime-local" step="60">
+          </label>
+        </div>
+      </div>
+      <div id="historyMeta" class="history-meta">等待采样</div>
+
+      <div class="chart-panel">
+        <div class="chart-title">
+          <h3>累计用量</h3>
+          <span id="cumulativeValue">-</span>
+        </div>
+        <div class="chart-wrap">
+          <svg id="cumulativeChart" class="chart" viewBox="0 0 900 260" role="img" aria-label="累计 5 小时额度用量曲线"></svg>
+          <div id="cumulativeEmpty" class="chart-empty hidden">暂无历史数据</div>
+        </div>
+      </div>
+
+      <div class="chart-panel">
+        <div class="chart-title">
+          <h3>短期活跃用量</h3>
+          <span id="activityValue">-</span>
+        </div>
+        <div class="chart-wrap compact">
+          <svg id="activityChart" class="chart compact" viewBox="0 0 900 220" role="img" aria-label="短期 5 小时额度活跃用量曲线"></svg>
+          <div id="activityEmpty" class="chart-empty hidden">暂无历史数据</div>
+        </div>
+      </div>
+    </section>
+
     <section id="accounts" class="grid" aria-live="polite"></section>
   </main>
 
-  <script src="/script.js"></script>
+  <script src="/script.js?v=20260526-auth-download-hover"></script>
 </body>
 </html>

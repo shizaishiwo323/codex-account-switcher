@@ -4,6 +4,9 @@ from pathlib import Path
 HOST = "127.0.0.1"
 PORT = 8765
 QUERY_TIMEOUT = 60.0
+PUBLIC_MONITOR_HOSTS = {
+    "codex-quota.shizaishiwo.com",
+}
 CODEX_APP_BUNDLE_ID = "com.openai.codex"
 CODEX_APP_PATH = Path("/Applications/Codex.app")
 
