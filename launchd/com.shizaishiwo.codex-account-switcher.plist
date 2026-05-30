@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.shizaishiwo.codex-account-switcher</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/Users/wangbin/Documents/Codex/codex-account-switcher/scripts/run_codex_account_switcher_app.sh</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/account-switcher.out.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/account-switcher.err.log</string>
+</dict>
+</plist>

@@ -5,18 +5,41 @@
 ## 1. 新建一个独立 Codex Home 并登录
 
 ```bash
-mkdir -p ~/.codex-account2
-CODEX_HOME=$HOME/.codex-account2 codex login
+mkdir -p ~/.codex-shizaishiwo1223
+CODEX_HOME=$HOME/.codex-shizaishiwo1223 codex login
+```
+
+## 5. 创建 tmux 会话并启动指定账号
+
+```bash
+tmux new -s codex-shizaishiwo1223
 ```
 
 说明：
 
-这会新建一个叫 `codex-account2` 的 Codex Home 环境，并在这个环境里登录第二个账号。它不会覆盖默认 `~/.codex` 里的账号。
+创建一个名为 `codex-shizaishiwo1223` 的 tmux 会话。
+
+进入 tmux 会话后运行：
+
+```bash
+
+export CODEX_HOME=$HOME/.codex-shizaishiwo1223
+codex
+```
+重新进入会话：
+
+```bash
+tmux attach -t codex-shizaishiwo1223
+```
+
+说明：
+
+这会新建一个叫 `codex-shizaishiwo1223` 的 Codex Home 环境，并在这个环境里登录第二个账号。它不会覆盖默认 `~/.codex` 里的账号。
 
 ## 2. 用指定账号环境启动 Codex
 
 ```bash
-CODEX_HOME=$HOME/.codex-shizaishiwo323 codex
+CODEX_HOME=$HOME/.codex-shizaishiwo1223 codex
 ```
 
 说明：
@@ -24,12 +47,12 @@ CODEX_HOME=$HOME/.codex-shizaishiwo323 codex
 用 `shizaishiwo323` 这个 Codex Home 环境启动 Codex。
 
 ```bash
-CODEX_HOME=$HOME/.codex-account2 codex
+CODEX_HOME=$HOME/.codex-shizaishiwo1223 codex
 ```
 
 说明：
 
-用 `codex-account2` 这个 Codex Home 环境启动 Codex，也就是启动第二个账号。
+用 `codex-shizaishiwo1223` 这个 Codex Home 环境启动 Codex，也就是启动第二个账号。
 
 ## 3. 查看当前 Codex CLI 进程使用哪个账号环境
 
@@ -68,17 +91,18 @@ tmux -V
 ## 5. 创建 tmux 会话并启动指定账号
 
 ```bash
-tmux new -s codex-123
+tmux new -s codex-shizaishiwo1223
 ```
 
 说明：
 
-创建一个名为 `codex-123` 的 tmux 会话。
+创建一个名为 `codex-shizaishiwo1223` 的 tmux 会话。
 
 进入 tmux 会话后运行：
 
 ```bash
-export CODEX_HOME=$HOME/.codex-shizaishiwo123
+
+export CODEX_HOME=$HOME/.codex-shizaishiwo1223
 codex
 ```
 
@@ -97,7 +121,13 @@ Ctrl-b 然后按 d
 重新进入会话：
 
 ```bash
-tmux attach -t codex-123
+tmux attach -t codex-shizaishiwo1223
+```
+
+重新进入 `shizaishiwo323` 账号对应的后台会话：
+
+```bash
+tmux attach -t codex-shizaishiwo1223
 ```
 
 查看所有会话：
@@ -109,7 +139,7 @@ tmux list-sessions
 关闭指定会话：
 
 ```bash
-tmux kill-session -t codex-123
+tmux kill-session -t codex-shizaishiwo1223
 ```
 
 ## 7. 和本项目账号池的关系
@@ -118,9 +148,15 @@ tmux kill-session -t codex-123
 
 ```text
 /Users/wangbin/.codex/auth.json
-/Users/wangbin/.codex-shizaishiwo323/auth.json
-/Users/wangbin/.codex-shizaishiwo123/auth.json
+/Users/wangbin/.codex-shizaishiwo1223/auth.json
+/Users/wangbin/.codex-shizaishiwo1223/auth.json
 /Users/wangbin/.codex-shizaishiwo0/auth.json
 ```
 
-如果你用新的 `CODEX_HOME` 登录了新账号，只需要把新目录里的 `auth.json` 配到 `config.py` 的 `ACCOUNTS` 里，网页控制台就能查询它的额度，并支持一键切换。
+如果你用新的 `CODEX_HOME` 登录了新账号，只要目录名形如 `.codex-账号id` 且里面存在 `auth.json`，网页控制台和保活脚本都会自动识别它。比如 `/Users/wangbin/.codex-shizaishiwo1223/auth.json` 会生成账号 id `zshi0509`，网页默认显示为 `仓库池 zshi0509`，tmux 会话名为 `codex-shizaishiwo1223`。
+
+网页端可以直接控制每个仓库池账号的后台保活模式：
+
+- `自动`：当前不会因为 `1周` 额度用完自动暂停，开机脚本会启动所有未手动停止的 `.codex-*` 账号。
+- `启动`：手动强制启动后台保活。
+- `停止`：手动停止后台保活，并阻止 launchd 自动拉起。

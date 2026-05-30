@@ -8,3 +8,5 @@ server.log
 screenshot.png
 usage_history.json
 .usage-history-*.json
+keepalive_state.json
+.keepalive-state-*.json

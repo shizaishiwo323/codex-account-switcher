@@ -202,13 +202,18 @@ def remaining_percent(window: Any) -> int | None:
     return round(max(0, min(100, 100 - float(used))))
 
 
-def format_window(window: Any, show_date: bool) -> dict[str, Any]:
+def window_reset_shows_date(window: dict[str, Any]) -> bool:
+    seconds = window.get("limit_window_seconds")
+    return isinstance(seconds, (int, float)) and seconds >= 86400
+
+
+def format_window(window: Any) -> dict[str, Any]:
     if not isinstance(window, dict):
         return {"label": "-", "remaining_percent": None, "reset": "-"}
     return {
         "label": window_label(window.get("limit_window_seconds")),
         "remaining_percent": remaining_percent(window),
-        "reset": reset_time(window.get("reset_at"), show_date),
+        "reset": reset_time(window.get("reset_at"), window_reset_shows_date(window)),
         "used_percent": window.get("used_percent"),
         "reset_at": window.get("reset_at"),
     }
@@ -239,6 +244,6 @@ def query_usage(auth_path: Path, timeout: float = DEFAULT_HTTP_TIMEOUT) -> dict[
         "token_refreshed": refreshed,
         "allowed": rate_limit.get("allowed"),
         "limit_reached": rate_limit.get("limit_reached"),
-        "primary": format_window(rate_limit.get("primary_window"), show_date=False),
-        "secondary": format_window(rate_limit.get("secondary_window"), show_date=True),
+        "primary": format_window(rate_limit.get("primary_window")),
+        "secondary": format_window(rate_limit.get("secondary_window")),
     }

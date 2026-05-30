@@ -1,6 +1,8 @@
 const accountsEl = document.querySelector("#accounts");
 const refreshBtn = document.querySelector("#refreshBtn");
+const quotaSortBtn = document.querySelector("#quotaSortBtn");
 const noticeEl = document.querySelector("#notice");
+const accountSummaryEl = document.querySelector("#accountSummary");
 const cumulativeChartEl = document.querySelector("#cumulativeChart");
 const cumulativeEmptyEl = document.querySelector("#cumulativeEmpty");
 const cumulativeValueEl = document.querySelector("#cumulativeValue");
@@ -15,6 +17,8 @@ const cumulativeColor = "#0f766e";
 const activityColor = "#2563eb";
 let latestHistory = null;
 let monitorOnly = false;
+let latestAccounts = [];
+let quotaSortEnabled = false;
 
 function showNotice(message, type = "") {
   noticeEl.textContent = message;
@@ -90,6 +94,140 @@ function usageRow(windowData) {
   `;
 }
 
+function windowRemainingByLabel(usage, label) {
+  const windows = [usage.primary, usage.secondary];
+  const windowData = windows.find((item) => item?.label === label);
+  return numberOrNull(windowData?.remaining_percent);
+}
+
+function hasEnoughSwitchQuota(usage) {
+  const fiveHourRemaining = windowRemainingByLabel(usage, "5小时");
+  const weeklyRemaining = windowRemainingByLabel(usage, "1周");
+  if (weeklyRemaining === null || weeklyRemaining <= 0) return false;
+  if (fiveHourRemaining === null) return true;
+  return fiveHourRemaining > 0;
+}
+
+function quotaSortNumber(value, fallback = -1) {
+  return value === null ? fallback : value;
+}
+
+function accountSortMetrics(account) {
+  const usage = account.usage || {};
+  return {
+    weekly: quotaSortNumber(windowRemainingByLabel(usage, "1周")),
+    fiveHour: quotaSortNumber(windowRemainingByLabel(usage, "5小时")),
+    ok: account.ok ? 1 : 0,
+  };
+}
+
+function orderedAccounts(accounts) {
+  return accounts
+    .map((account, index) => ({account, index, metrics: accountSortMetrics(account)}))
+    .sort((left, right) => {
+      if (left.account.is_active !== right.account.is_active) {
+        return left.account.is_active ? -1 : 1;
+      }
+      if (!quotaSortEnabled) {
+        return left.index - right.index;
+      }
+      if (left.metrics.weekly !== right.metrics.weekly) {
+        return right.metrics.weekly - left.metrics.weekly;
+      }
+      if (left.metrics.fiveHour !== right.metrics.fiveHour) {
+        return right.metrics.fiveHour - left.metrics.fiveHour;
+      }
+      if (left.metrics.ok !== right.metrics.ok) {
+        return right.metrics.ok - left.metrics.ok;
+      }
+      return left.index - right.index;
+    })
+    .map((item) => item.account);
+}
+
+function updateQuotaSortButton() {
+  quotaSortBtn.classList.toggle("active", quotaSortEnabled);
+  quotaSortBtn.setAttribute("aria-pressed", String(quotaSortEnabled));
+  quotaSortBtn.textContent = quotaSortEnabled ? "恢复默认" : "额度降序";
+}
+
+function normalizedPlan(account) {
+  return String(account.usage?.plan || "").toLowerCase();
+}
+
+function accountSummary(accounts) {
+  return accounts.reduce((summary, account) => {
+    const plan = normalizedPlan(account);
+    summary.total += 1;
+    if (plan === "plus") summary.plus += 1;
+    if (plan === "free") summary.free += 1;
+    if (account.ok && hasEnoughSwitchQuota(account.usage || {})) summary.usable += 1;
+    return summary;
+  }, {total: 0, plus: 0, free: 0, usable: 0});
+}
+
+function renderAccountSummary(accounts) {
+  const summary = accountSummary(accounts);
+  const items = [
+    ["账号", summary.total],
+    ["Plus", summary.plus],
+    ["免费", summary.free],
+    ["可使用", summary.usable],
+  ];
+  accountSummaryEl.innerHTML = items.map(([label, value]) => `
+    <div class="summary-item">
+      <span>${label}</span>
+      <strong>${value}</strong>
+    </div>
+  `).join("");
+}
+
+function renderAccounts(accounts) {
+  latestAccounts = accounts;
+  renderAccountSummary(accounts);
+  accountsEl.innerHTML = orderedAccounts(accounts).map(cardHtml).join("");
+  bindDownloadButtons();
+  bindUploadButtons();
+  bindSwitchButtons();
+  bindKeepaliveButtons();
+  updateQuotaSortButton();
+}
+
+function keepaliveStatusText(keepalive) {
+  if (!keepalive?.enabled) return "";
+  const running = keepalive.running ? "运行中" : "未运行";
+  if (keepalive.mode === "off") return `后台保活：手动停止 · ${running}`;
+  if (keepalive.mode === "on") return `后台保活：手动启动 · ${running}`;
+  if (keepalive.reason === "weekly_exhausted" && keepalive.resume_at) {
+    return `后台保活：自动暂停到 ${fullTime(keepalive.resume_at)} · ${running}`;
+  }
+  return `后台保活：自动 · ${running}`;
+}
+
+function keepaliveControlsHtml(account) {
+  const keepalive = account.keepalive || {};
+  if (!keepalive.enabled) return "";
+  const disabled = monitorOnly ? "disabled" : "";
+  const modes = [
+    ["auto", "自动"],
+    ["on", "启动"],
+    ["off", "停止"],
+  ];
+  const buttons = modes.map(([mode, label]) => `
+    <button class="keepalive-mode ${keepalive.mode === mode ? "active" : ""}" type="button" data-keepalive-id="${escapeHtml(account.id)}" data-keepalive-mode="${mode}" ${disabled}>
+      ${label}
+    </button>
+  `).join("");
+  return `
+    <div class="keepalive-panel">
+      <div class="keepalive-status">${escapeHtml(keepaliveStatusText(keepalive))}</div>
+      <div class="keepalive-modes" role="group" aria-label="${escapeHtml(account.label)} 后台保活模式">
+        ${buttons}
+      </div>
+    </div>
+  `;
+}
+
 function cardHtml(account) {
   const usage = account.usage || {};
   const title = usage.email || usage.name || "未识别账号";
@@ -98,18 +236,28 @@ function cardHtml(account) {
   const badge = account.is_active ? "当前使用" : monitorOnly ? "只读监控" : account.can_switch ? "可切换" : "默认路径";
   const switchDisabled = !account.ok || !account.can_switch || account.is_active;
   const buttonDisabled = monitorOnly || switchDisabled;
+  const switchQuotaOk = hasEnoughSwitchQuota(usage);
+  const switchButtonClass = account.is_active ? "" : switchQuotaOk ? "primary" : "danger";
   const metaLines = [`计划：${usage.plan || "-"}`];
   if (account.path) {
     metaLines.push(`路径：${account.path}`);
   }
   const metaHtml = metaLines.map(escapeHtml).join("<br>");
-  const actionTitle = monitorOnly ? "公网只读监控不能切换账号" : "";
+  const actionTitle = monitorOnly
+    ? "公网只读监控不能切换账号"
+    : switchQuotaOk
+      ? "5 小时额度和 1 周额度均可用"
+      : "5 小时额度或 1 周额度不可用，仍可手动切换";
   const downloadHref = `/api/accounts/${encodeURIComponent(account.id)}/auth.json`;
   const downloadName = `${safeFileBase(account.id)}-auth.json`;
+  const uploadButton = account.can_upload
+    ? `<button class="button" type="button" data-upload-auth="${escapeHtml(account.id)}">上传认证</button>`
+    : "";
   const actionHtml = `
-    <div class="card-actions">
+    <div class="card-actions ${account.can_upload ? "has-upload" : ""}">
       <a class="button" href="${downloadHref}" download="${escapeHtml(downloadName)}" data-download-auth="${escapeHtml(account.id)}">下载认证</a>
-      <button class="button ${account.is_active ? "" : "primary"}" data-switch="${escapeHtml(account.id)}" ${buttonDisabled ? "disabled" : ""} title="${actionTitle}">
+      ${uploadButton}
+      <button class="button ${switchButtonClass}" data-switch="${escapeHtml(account.id)}" ${buttonDisabled ? "disabled" : ""} title="${actionTitle}">
         ${account.is_active ? "正在使用" : "切换到此账号"}
       </button>
     </div>
@@ -138,7 +286,10 @@ function cardHtml(account) {
         `}
       </div>
 
-      ${actionHtml}
+      <div class="card-footer">
+        ${actionHtml}
+        ${keepaliveControlsHtml(account)}
+      </div>
     </article>
   `;
 }
@@ -151,9 +302,7 @@ async function loadAccounts({silent = false} = {}) {
     const data = await res.json();
     monitorOnly = Boolean(data.monitor_only);
     document.body.classList.toggle("monitor-only", monitorOnly);
-    accountsEl.innerHTML = data.accounts.map(cardHtml).join("");
-    bindDownloadButtons();
-    bindSwitchButtons();
+    renderAccounts(data.accounts);
     loadHistory();
     if (!silent) showNotice("额度已刷新", "good");
   } catch (err) {
@@ -180,13 +329,40 @@ function bindSwitchButtons() {
         if (!res.ok || !data.ok) {
           throw new Error(data.error || "切换失败");
         }
-        accountsEl.innerHTML = data.accounts.map(cardHtml).join("");
-        bindDownloadButtons();
-        bindSwitchButtons();
+        renderAccounts(data.accounts);
         loadHistory();
         showNotice(`已切换到 ${data.result.label}，Codex 正在重新启动。备份：${data.result.backup}`, "good");
       } catch (err) {
         showNotice(`切换失败：${err.message}`, "bad");
+        btn.disabled = false;
+      }
+    });
+  });
+}
+
+function bindKeepaliveButtons() {
+  if (monitorOnly) return;
+  document.querySelectorAll("[data-keepalive-id]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.getAttribute("data-keepalive-id");
+      const mode = btn.getAttribute("data-keepalive-mode");
+      btn.disabled = true;
+      showNotice("正在更新后台保活设置...");
+      try {
+        const res = await fetch("/api/keepalive", {
+          method: "POST",
+          headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({id, mode}),
+        });
+        const data = await res.json();
+        if (!res.ok || !data.ok) {
+          throw new Error(data.error || "保活设置更新失败");
+        }
+        renderAccounts(data.accounts);
+        loadHistory();
+        showNotice("后台保活设置已更新", "good");
+      } catch (err) {
+        showNotice(`保活设置更新失败：${err.message}`, "bad");
         btn.disabled = false;
       }
     });
@@ -226,6 +402,62 @@ function bindDownloadButtons() {
       } catch (err) {
         showNotice(`下载失败：${err.message}。如果刚更新过程序，请重启网页服务后重试。`, "bad");
       }
+    });
+  });
+}
+
+function backupSummary(backups) {
+  if (!Array.isArray(backups) || !backups.length) return "";
+  return `备份：${backups.map((backup) => backup.path).join("；")}`;
+}
+
+function uploadConfirmMessage(account, file) {
+  return [
+    `将把 ${file.name} 上传并覆盖「${account?.label || "目标账号"}」的账号池认证文件。`,
+    "如果这个文件来自另一台电脑的“默认配置”，请确认它属于那台电脑当时实际登录的账号。",
+    "服务器会先比对文件；相同则不覆盖，不同则先备份目标文件和上传文件再覆盖。",
+  ].join("\n\n");
+}
+
+function bindUploadButtons() {
+  document.querySelectorAll("[data-upload-auth]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const id = btn.getAttribute("data-upload-auth");
+      const account = latestAccounts.find((item) => item.id === id);
+      const input = document.createElement("input");
+      input.type = "file";
+      input.accept = ".json,application/json";
+      input.addEventListener("change", async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        if (!window.confirm(uploadConfirmMessage(account, file))) return;
+
+        btn.disabled = true;
+        showNotice(`正在上传 ${file.name} 并比对目标认证...`);
+        try {
+          const res = await fetch(`/api/accounts/${encodeURIComponent(id)}/auth.json`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: file,
+          });
+          const data = await res.json();
+          if (!res.ok || !data.ok) {
+            throw new Error(data.error || "上传失败");
+          }
+          if (Array.isArray(data.accounts)) {
+            renderAccounts(data.accounts);
+          }
+          loadHistory();
+          const detail = backupSummary(data.result.backups);
+          showNotice(data.result.changed
+            ? `已覆盖 ${account?.label || id} 的认证文件。${detail}`
+            : `${account?.label || id} 的认证文件没有变化，无需覆盖。`, "good");
+        } catch (err) {
+          showNotice(`上传失败：${err.message}`, "bad");
+          btn.disabled = false;
+        }
+      }, {once: true});
+      input.click();
     });
   });
 }
@@ -539,6 +771,10 @@ async function loadHistory() {
 }
 
 refreshBtn.addEventListener("click", () => loadAccounts());
+quotaSortBtn.addEventListener("click", () => {
+  quotaSortEnabled = !quotaSortEnabled;
+  renderAccounts(latestAccounts);
+});
 historyStartInput.addEventListener("change", () => latestHistory && renderHistory(latestHistory));
 historyEndInput.addEventListener("change", () => latestHistory && renderHistory(latestHistory));
 loadAccounts({silent: true}).then(hideNotice);

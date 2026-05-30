@@ -15,23 +15,35 @@ from urllib.parse import quote, unquote, urlparse
 
 from codex_usage import load_auth, query_usage
 from config import (
-    ACCOUNTS,
     BACKUP_DIR,
     CODEX_APP_BUNDLE_ID,
     CODEX_APP_PATH,
     DEFAULT_AUTH_PATH,
     HOST,
+    KEEPALIVE_AUTO_WEEKLY_PAUSE,
     PORT,
     PUBLIC_MONITOR_HOSTS,
     QUERY_TIMEOUT,
+    get_accounts,
+)
+from keepalive_control import (
+    MODE_AUTO,
+    MODE_OFF,
+    MODE_ON,
+    KeepaliveState,
+    start_keepalive_session,
+    stop_keepalive_session,
 )
 
 
 ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 USAGE_HISTORY_PATH = ROOT / "usage_history.json"
+KEEPALIVE_STATE_PATH = ROOT / "keepalive_state.json"
 USAGE_SAMPLE_INTERVAL_SECONDS = 10 * 60
 USAGE_HISTORY_SAMPLE_LIMIT = 90 * 24 * 6
+MAX_AUTH_UPLOAD_BYTES = 2 * 1024 * 1024
+KEEPALIVE_STATE = KeepaliveState(KEEPALIVE_STATE_PATH, auto_pause_enabled=KEEPALIVE_AUTO_WEEKLY_PAUSE)
 
 
 def normalize_host(host: str | None) -> str:
@@ -81,8 +93,17 @@ def read_json(handler: BaseHTTPRequestHandler) -> dict:
     return json.loads(handler.rfile.read(length).decode("utf-8"))
 
 
+def read_body_bytes(handler: BaseHTTPRequestHandler, max_bytes: int = MAX_AUTH_UPLOAD_BYTES) -> bytes:
+    length = int(handler.headers.get("Content-Length", "0") or "0")
+    if length <= 0:
+        return b""
+    if length > max_bytes:
+        raise ValueError(f"上传文件过大，最大允许 {max_bytes // 1024 // 1024} MB")
+    return handler.rfile.read(length)
+
+
 def find_account(account_id: str) -> dict | None:
-    for account in ACCOUNTS:
+    for account in get_accounts():
         if account["id"] == account_id:
             return account
     return None
@@ -97,15 +118,17 @@ def current_default_account_id() -> str | None:
 
 def account_items() -> list[dict]:
     active_account_id = current_default_account_id()
+    accounts = get_accounts()
     items_by_id = {}
-    with ThreadPoolExecutor(max_workers=len(ACCOUNTS)) as executor:
+    with ThreadPoolExecutor(max_workers=max(1, len(accounts))) as executor:
         futures = {}
-        for account in ACCOUNTS:
+        for account in accounts:
             item = {
                 "id": account["id"],
                 "label": account["label"],
                 "path": str(account["auth_path"]),
                 "can_switch": bool(account.get("can_switch")),
+                "can_upload": bool(account.get("can_switch")),
                 "is_active": False,
                 "ok": False,
                 "error": None,
@@ -125,7 +148,12 @@ def account_items() -> list[dict]:
             except Exception as exc:
                 item["error"] = str(exc)
 
-    return [items_by_id[account["id"]] for account in ACCOUNTS]
+    items = [items_by_id[account["id"]] for account in accounts]
+    KEEPALIVE_STATE.update_auto_pauses(items)
+    KEEPALIVE_STATE.attach_payloads(items)
+    if KEEPALIVE_STATE.stop_paused_auto_sessions(items):
+        KEEPALIVE_STATE.attach_payloads(items)
+    return items
 
 
 class UsageHistory:
@@ -229,7 +257,7 @@ class UsageHistory:
                 "sample_interval_seconds": USAGE_SAMPLE_INTERVAL_SECONDS,
                 "accounts": [
                     {"id": account["id"], "label": account["label"]}
-                    for account in ACCOUNTS
+                    for account in get_accounts()
                 ],
                 "samples": deepcopy(self.samples),
                 "switches": deepcopy(self.switches),
@@ -251,11 +279,31 @@ def monitor_safe_accounts(accounts: list[dict], monitor_only: bool) -> list[dict
     safe_accounts = deepcopy(accounts)
     for account in safe_accounts:
         account["can_switch"] = False
+        account["keepalive"] = {"enabled": False}
         account.pop("path", None)
         usage = account.get("usage")
         if isinstance(usage, dict):
             usage.pop("path", None)
     return safe_accounts
+
+
+def apply_keepalive_mode(target: dict, mode: str) -> list[dict]:
+    KEEPALIVE_STATE.update_mode(target["id"], mode)
+    if mode == MODE_ON:
+        start_keepalive_session(target)
+        return sample_usage_history("keepalive")
+    if mode == MODE_OFF:
+        stop_keepalive_session(target["id"])
+        return sample_usage_history("keepalive")
+
+    accounts = sample_usage_history("keepalive")
+    target_item = next((account for account in accounts if account.get("id") == target["id"]), None)
+    keepalive = target_item.get("keepalive") if isinstance(target_item, dict) else {}
+    if isinstance(keepalive, dict) and keepalive.get("desired"):
+        start_keepalive_session(target)
+    else:
+        stop_keepalive_session(target["id"])
+    return sample_usage_history("keepalive")
 
 
 def download_filename(account: dict) -> str:
@@ -264,6 +312,188 @@ def download_filename(account: dict) -> str:
         for char in str(account.get("id") or "account")
     ).strip("-")
     return f"{stem or 'account'}-auth.json"
+
+
+def backup_name_part(value: object) -> str:
+    part = "".join(
+        char if char.isalnum() or char in {"-", "_"} else "-"
+        for char in str(value or "unknown")
+    ).strip("-")
+    return part or "unknown"
+
+
+def auth_files_equal(left: Path, right: Path) -> bool:
+    return left.read_bytes() == right.read_bytes()
+
+
+def atomic_write_bytes(destination_path: Path, data: bytes, prefix: str) -> None:
+    destination_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "wb",
+            delete=False,
+            dir=str(destination_path.parent),
+            prefix=prefix,
+            suffix=".json",
+        ) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        tmp_path.replace(destination_path)
+    finally:
+        if tmp_path and tmp_path.exists():
+            tmp_path.unlink()
+
+
+def backup_auth_file(path: Path, *, operation: str, role: str, account_id: str, stamp: str) -> dict:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    filename = (
+        f"auth-{backup_name_part(operation)}-"
+        f"{backup_name_part(role)}-"
+        f"{backup_name_part(account_id)}-"
+        f"{stamp}.json"
+    )
+    backup_path = BACKUP_DIR / filename
+    shutil.copy2(path, backup_path)
+    return {
+        "role": role,
+        "account_id": account_id,
+        "source": str(path),
+        "path": str(backup_path),
+    }
+
+
+def validate_auth_bytes(data: bytes) -> None:
+    if not data:
+        raise ValueError("上传的认证文件为空")
+    with tempfile.NamedTemporaryFile("wb", delete=True, suffix=".json") as tmp:
+        tmp.write(data)
+        tmp.flush()
+        load_auth(Path(tmp.name))
+
+
+def pool_account_for_auth(auth_account_id: str | None, default_path: Path) -> dict | None:
+    if not auth_account_id:
+        return None
+    for account in get_accounts():
+        if not account.get("can_switch"):
+            continue
+        auth_path = Path(account["auth_path"]).expanduser().resolve()
+        if auth_path == default_path:
+            continue
+        try:
+            pool_auth = load_auth(auth_path)
+        except Exception:
+            continue
+        if pool_auth.account_id == auth_account_id:
+            return account
+    return None
+
+
+def sync_default_auth_to_current_pool(stamp: str, backups: list[dict]) -> dict:
+    default_path = DEFAULT_AUTH_PATH.expanduser().resolve()
+    default_auth = load_auth(default_path)
+    current_account = pool_account_for_auth(default_auth.account_id, default_path)
+    if not current_account:
+        return {
+            "changed": False,
+            "reason": "没有找到和当前默认认证 account_id 匹配的账号池账号",
+            "current_account_id": default_auth.account_id,
+            "synced_to": None,
+        }
+
+    pool_path = Path(current_account["auth_path"]).expanduser().resolve()
+    synced_to = str(current_account["id"])
+    if auth_files_equal(default_path, pool_path):
+        return {
+            "changed": False,
+            "reason": "默认认证和当前账号池认证完全一致，无需回写",
+            "current_account_id": default_auth.account_id,
+            "synced_to": synced_to,
+            "pool_path": str(pool_path),
+        }
+
+    backups.append(
+        backup_auth_file(
+            default_path,
+            operation="switch",
+            role="default_before_sync_to_pool",
+            account_id=synced_to,
+            stamp=stamp,
+        )
+    )
+    backups.append(
+        backup_auth_file(
+            pool_path,
+            operation="switch",
+            role="pool_before_default_sync",
+            account_id=synced_to,
+            stamp=stamp,
+        )
+    )
+    atomic_write_bytes(pool_path, default_path.read_bytes(), ".auth-sync-")
+    return {
+        "changed": True,
+        "reason": "默认认证比账号池认证更新，已回写到当前账号池",
+        "current_account_id": default_auth.account_id,
+        "synced_to": synced_to,
+        "pool_path": str(pool_path),
+    }
+
+
+def replace_account_auth(target: dict, uploaded_data: bytes) -> dict:
+    if not target.get("can_switch"):
+        raise ValueError("只能上传覆盖账号池认证，不能远程覆盖默认配置")
+
+    auth_path = Path(target["auth_path"]).expanduser().resolve()
+    if not auth_path.exists() or not auth_path.is_file():
+        raise FileNotFoundError(f"认证文件不存在: {auth_path}")
+    load_auth(auth_path)
+    validate_auth_bytes(uploaded_data)
+
+    if uploaded_data == auth_path.read_bytes():
+        return {
+            "changed": False,
+            "reason": "上传文件和目标账号池认证完全一致，无需覆盖",
+            "account_id": target["id"],
+            "path": str(auth_path),
+            "backups": [],
+        }
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    account_id = str(target["id"])
+    backups = [
+        backup_auth_file(
+            auth_path,
+            operation="upload",
+            role="target_before_upload",
+            account_id=account_id,
+            stamp=stamp,
+        )
+    ]
+
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    uploaded_backup_path = BACKUP_DIR / (
+        f"auth-upload-uploaded_auth-{backup_name_part(account_id)}-{stamp}.json"
+    )
+    uploaded_backup_path.write_bytes(uploaded_data)
+    backups.append(
+        {
+            "role": "uploaded_auth",
+            "account_id": account_id,
+            "source": "upload",
+            "path": str(uploaded_backup_path),
+        }
+    )
+
+    atomic_write_bytes(auth_path, uploaded_data, ".auth-upload-")
+    return {
+        "changed": True,
+        "reason": "上传文件和目标账号池认证不同，已备份两边并覆盖目标认证",
+        "account_id": account_id,
+        "path": str(auth_path),
+        "backups": backups,
+    }
 
 
 def usage_sampler_loop() -> None:
@@ -349,16 +579,21 @@ def switch_account(target: dict) -> dict:
     load_auth(source_path)
     load_auth(destination_path)
 
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
-    backup_path = BACKUP_DIR / f"auth-default-{stamp}.json"
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
+    backups: list[dict] = []
+    pre_switch_sync = sync_default_auth_to_current_pool(stamp, backups)
+    backups.append(
+        backup_auth_file(
+            destination_path,
+            operation="switch",
+            role="default_before_switch",
+            account_id=str(target["id"]),
+            stamp=stamp,
+        )
+    )
 
     quit_codex()
-    shutil.copy2(destination_path, backup_path)
-    with tempfile.NamedTemporaryFile("wb", delete=False, dir=str(destination_path.parent), prefix=".auth-switch-", suffix=".json") as tmp:
-        tmp_path = Path(tmp.name)
-    shutil.copy2(source_path, tmp_path)
-    tmp_path.replace(destination_path)
+    atomic_write_bytes(destination_path, source_path.read_bytes(), ".auth-switch-")
     launch = open_codex()
 
     return {
@@ -366,7 +601,9 @@ def switch_account(target: dict) -> dict:
         "label": target["label"],
         "source": str(source_path),
         "destination": str(destination_path),
-        "backup": str(backup_path),
+        "backup": backups[-1]["path"],
+        "backups": backups,
+        "pre_switch_sync": pre_switch_sync,
         "launch": launch,
     }
 
@@ -407,6 +644,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
+
+    def serve_auth_upload(self, account_id: str) -> None:
+        target = find_account(account_id)
+        if not target:
+            json_response(self, 404, {"ok": False, "error": "未知账号"})
+            return
+        try:
+            uploaded_data = read_body_bytes(self)
+            result = replace_account_auth(target, uploaded_data)
+            accounts = monitor_safe_accounts(sample_usage_history("upload"), is_monitor_only_request(self))
+            json_response(self, 200, {"ok": True, "result": result, "accounts": accounts})
+        except Exception as exc:
+            json_response(self, 400, {"ok": False, "error": str(exc)})
 
     def do_HEAD(self) -> None:
         path = urlparse(self.path).path
@@ -468,6 +718,34 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self) -> None:
         path = urlparse(self.path).path
+        if path.startswith("/api/accounts/") and path.endswith("/auth.json"):
+            account_id = unquote(path.removeprefix("/api/accounts/").removesuffix("/auth.json"))
+            self.serve_auth_upload(account_id)
+            return
+
+        if path == "/api/keepalive":
+            if is_monitor_only_request(self):
+                json_response(self, 403, {"ok": False, "error": "公网监控入口是只读模式，不能控制后台保活"})
+                return
+            try:
+                payload = read_json(self)
+                account_id = payload.get("id")
+                mode = payload.get("mode")
+                if not isinstance(account_id, str):
+                    raise ValueError("缺少账号 id")
+                if mode not in {MODE_AUTO, MODE_ON, MODE_OFF}:
+                    raise ValueError("缺少有效保活模式")
+                target = find_account(account_id)
+                if not target:
+                    raise ValueError(f"未知账号: {account_id}")
+                if not target.get("can_switch"):
+                    raise ValueError("这个账号没有后台保活控制")
+                accounts = apply_keepalive_mode(target, mode)
+                json_response(self, 200, {"ok": True, "accounts": accounts})
+            except Exception as exc:
+                json_response(self, 400, {"ok": False, "error": str(exc)})
+            return
+
         if path != "/api/switch":
             self.send_error(404)
             return
