@@ -312,6 +312,26 @@ async function loadAccounts({silent = false} = {}) {
   }
 }
 
+function preSwitchSyncMessage(result) {
+  const sync = result?.pre_switch_sync;
+  if (!sync) return "";
+  if (sync.changed) {
+    return [
+      "当前默认认证文件已更新。",
+      `已把最新认证覆盖到对应账号池：${sync.synced_to || "未知账号"}`,
+      sync.pool_path ? `账号池路径：${sync.pool_path}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  if (sync.synced_to) {
+    return [
+      "当前认证文件未更新。",
+      `默认认证文件和当前使用的账号池认证一致：${sync.synced_to}`,
+      sync.pool_path ? `账号池路径：${sync.pool_path}` : "",
+    ].filter(Boolean).join("\n");
+  }
+  return sync.reason || "";
+}
+
 function bindSwitchButtons() {
   if (monitorOnly) return;
   document.querySelectorAll("[data-switch]").forEach((btn) => {
@@ -331,6 +351,10 @@ function bindSwitchButtons() {
         }
         renderAccounts(data.accounts);
         loadHistory();
+        const syncMessage = preSwitchSyncMessage(data.result);
+        if (syncMessage) {
+          window.alert(syncMessage);
+        }
         showNotice(`已切换到 ${data.result.label}，Codex 正在重新启动。备份：${data.result.backup}`, "good");
       } catch (err) {
         showNotice(`切换失败：${err.message}`, "bad");
