@@ -67,9 +67,11 @@ class AuthFileSyncTests(unittest.TestCase):
                 auth_bytes("acct-a", "old-pool-a-token"),
             )
             self.assertEqual(
-                by_role["default_before_switch"].read_bytes(),
+                by_role["before_switch"].read_bytes(),
                 auth_bytes("acct-a", "updated-default-token"),
             )
+            self.assertIn("a-to-b", by_role["before_switch"].name)
+            self.assertNotIn("default_before_switch-b", by_role["before_switch"].name)
 
     def test_switch_does_not_sync_current_pool_account_when_files_are_identical(self):
         with tempfile.TemporaryDirectory() as tmpdir:

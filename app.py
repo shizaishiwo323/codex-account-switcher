@@ -441,6 +441,13 @@ def sync_default_auth_to_current_pool(stamp: str, backups: list[dict]) -> dict:
     }
 
 
+def switch_backup_account_part(pre_switch_sync: dict, target_id: str) -> str:
+    source_id = pre_switch_sync.get("synced_to") if isinstance(pre_switch_sync, dict) else None
+    if not source_id:
+        source_id = pre_switch_sync.get("current_account_id") if isinstance(pre_switch_sync, dict) else None
+    return f"{backup_name_part(source_id or 'unknown')}-to-{backup_name_part(target_id)}"
+
+
 def replace_account_auth(target: dict, uploaded_data: bytes) -> dict:
     if not target.get("can_switch"):
         raise ValueError("只能上传覆盖账号池认证，不能远程覆盖默认配置")
@@ -582,12 +589,13 @@ def switch_account(target: dict) -> dict:
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     backups: list[dict] = []
     pre_switch_sync = sync_default_auth_to_current_pool(stamp, backups)
+    switch_pair = switch_backup_account_part(pre_switch_sync, str(target["id"]))
     backups.append(
         backup_auth_file(
             destination_path,
             operation="switch",
-            role="default_before_switch",
-            account_id=str(target["id"]),
+            role="before_switch",
+            account_id=switch_pair,
             stamp=stamp,
         )
     )
@@ -604,6 +612,8 @@ def switch_account(target: dict) -> dict:
         "backup": backups[-1]["path"],
         "backups": backups,
         "pre_switch_sync": pre_switch_sync,
+        "switch_from": pre_switch_sync.get("synced_to"),
+        "switch_to": target["id"],
         "launch": launch,
     }
 
