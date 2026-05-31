@@ -278,7 +278,6 @@ def monitor_safe_accounts(accounts: list[dict], monitor_only: bool) -> list[dict
         return accounts
     safe_accounts = deepcopy(accounts)
     for account in safe_accounts:
-        account["can_switch"] = False
         account["keepalive"] = {"enabled": False}
         account.pop("path", None)
         usage = account.get("usage")
@@ -758,9 +757,6 @@ class Handler(BaseHTTPRequestHandler):
 
         if path != "/api/switch":
             self.send_error(404)
-            return
-        if is_monitor_only_request(self):
-            json_response(self, 403, {"ok": False, "error": "公网监控入口是只读模式，不能切换账号"})
             return
         try:
             payload = read_json(self)

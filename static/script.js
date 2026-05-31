@@ -247,9 +247,9 @@ function cardHtml(account) {
   const title = usage.email || usage.name || "未识别账号";
   const active = account.is_active ? "active" : "";
   const error = account.ok ? "" : "error";
-  const badge = account.is_active ? "当前使用" : monitorOnly ? "只读监控" : account.can_switch ? "可切换" : "默认路径";
+  const badge = account.is_active ? "当前使用" : monitorOnly && account.can_switch ? "公网可切换" : account.can_switch ? "可切换" : "默认路径";
   const switchDisabled = !account.ok || !account.can_switch || account.is_active;
-  const buttonDisabled = monitorOnly || switchDisabled;
+  const buttonDisabled = switchDisabled;
   const switchQuotaOk = hasEnoughSwitchQuota(usage);
   const switchButtonClass = account.is_active ? "" : switchQuotaOk ? "primary" : "danger";
   const metaLines = [`计划：${usage.plan || "-"}`];
@@ -257,9 +257,7 @@ function cardHtml(account) {
     metaLines.push(`路径：${account.path}`);
   }
   const metaHtml = metaLines.map(escapeHtml).join("<br>");
-  const actionTitle = monitorOnly
-    ? "公网只读监控不能切换账号"
-    : switchQuotaOk
+  const actionTitle = switchQuotaOk
       ? "5 小时额度和 1 周额度均可用"
       : "5 小时额度或 1 周额度不可用，仍可手动切换";
   const downloadHref = `/api/accounts/${encodeURIComponent(account.id)}/auth.json`;
@@ -347,7 +345,6 @@ function preSwitchSyncMessage(result) {
 }
 
 function bindSwitchButtons() {
-  if (monitorOnly) return;
   document.querySelectorAll("[data-switch]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-switch");

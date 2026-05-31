@@ -100,7 +100,7 @@ logs/account-switcher.out.log
 logs/account-switcher.err.log
 ```
 
-## 公网只读监控
+## 公网入口
 
 建议使用子域名：
 
@@ -108,11 +108,11 @@ logs/account-switcher.err.log
 codex-quota.shizaishiwo.com
 ```
 
-`config.py` 里的 `PUBLIC_MONITOR_HOSTS` 已把这个域名配置为公网监控入口。请求 Host 命中该域名时：
+`config.py` 里的 `PUBLIC_MONITOR_HOSTS` 已把这个域名配置为公网入口。请求 Host 命中该域名时：
 
-- 前端只显示监控和刷新，不渲染切换按钮
-- `/api/accounts` 会把所有账号标记为不可切换，并隐藏本机 `auth.json` 路径
-- `POST /api/switch` 会直接返回 403，不能执行账号切换
+- 前端保留账号展示、额度查询、刷新、认证下载、认证上传和账号切换
+- `/api/accounts` 会隐藏本机 `auth.json` 路径，并隐藏后台保活控制
+- `POST /api/switch` 允许执行账号切换，切换会作用在这台电脑的默认认证文件上
 - `POST /api/keepalive` 会直接返回 403，不能控制后台保活
 - 公网页面仍可上传认证文件到指定仓库池账号，用来把另一台电脑下载到的最新默认认证同步回对应账号池
 
@@ -141,7 +141,7 @@ ingress:
 cloudflared tunnel run codex-quota
 ```
 
-如果使用 Nginx、Caddy 或其他反向代理，也要保留原始 `Host` 或设置 `X-Forwarded-Host`。建议在代理层额外阻断 `POST /api/switch` 和 `POST /api/keepalive`，让公网入口形成双保险；不要阻断 `POST /api/accounts/<id>/auth.json`，否则公网认证上传会不可用。
+如果使用 Nginx、Caddy 或其他反向代理，也要保留原始 `Host` 或设置 `X-Forwarded-Host`。如果需要公网切换账号，不要在代理层阻断 `POST /api/switch`；仍建议阻断 `POST /api/keepalive`，避免公网控制后台保活。也不要阻断 `POST /api/accounts/<id>/auth.json`，否则公网认证上传会不可用。
 
 ## 注意
 
