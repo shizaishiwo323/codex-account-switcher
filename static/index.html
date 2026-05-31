@@ -21,6 +21,14 @@
 
     <section id="notice" class="notice hidden"></section>
 
+    <section id="switchSyncDialog" class="switch-sync-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="switchSyncTitle">
+      <div class="switch-sync-panel">
+        <h2 id="switchSyncTitle">认证同步结果</h2>
+        <p id="switchSyncMessage"></p>
+        <button id="switchSyncClose" class="button primary" type="button">知道了</button>
+      </div>
+    </section>
+
     <section id="accountSummary" class="summary-strip" aria-label="账号统计"></section>
 
     <section class="history">
@@ -68,6 +76,6 @@
     <section id="accounts" class="grid" aria-live="polite"></section>
   </main>
 
-  <script src="/script.js?v=20260530-auth-sync-alert"></script>
+  <script src="/script.js?v=20260531-switch-sync-dialog"></script>
 </body>
 </html>

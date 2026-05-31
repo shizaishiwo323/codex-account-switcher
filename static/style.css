@@ -120,6 +120,49 @@ h2 {
   background: #991b1b;
 }
 
+.switch-sync-dialog {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(20, 23, 31, 0.42);
+}
+
+.switch-sync-dialog.hidden {
+  display: none;
+}
+
+.switch-sync-panel {
+  display: grid;
+  gap: 14px;
+  width: min(460px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  padding: 22px;
+  box-shadow: 0 22px 54px rgba(20, 23, 31, 0.22);
+}
+
+.switch-sync-panel h2 {
+  font-size: 22px;
+}
+
+.switch-sync-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 15px;
+  font-weight: 680;
+  line-height: 1.55;
+  white-space: pre-line;
+}
+
+.switch-sync-panel .button {
+  justify-self: end;
+  min-width: 104px;
+}
+
 .grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));

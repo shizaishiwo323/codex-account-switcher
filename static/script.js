@@ -2,6 +2,9 @@ const accountsEl = document.querySelector("#accounts");
 const refreshBtn = document.querySelector("#refreshBtn");
 const quotaSortBtn = document.querySelector("#quotaSortBtn");
 const noticeEl = document.querySelector("#notice");
+const switchSyncDialogEl = document.querySelector("#switchSyncDialog");
+const switchSyncMessageEl = document.querySelector("#switchSyncMessage");
+const switchSyncCloseBtn = document.querySelector("#switchSyncClose");
 const accountSummaryEl = document.querySelector("#accountSummary");
 const cumulativeChartEl = document.querySelector("#cumulativeChart");
 const cumulativeEmptyEl = document.querySelector("#cumulativeEmpty");
@@ -28,6 +31,17 @@ function showNotice(message, type = "") {
 function hideNotice() {
   noticeEl.className = "notice hidden";
   noticeEl.textContent = "";
+}
+
+function showSwitchSyncDialog(message) {
+  if (!switchSyncDialogEl || !switchSyncMessageEl) return;
+  switchSyncMessageEl.textContent = message;
+  switchSyncDialogEl.classList.remove("hidden");
+  switchSyncCloseBtn?.focus();
+}
+
+function hideSwitchSyncDialog() {
+  switchSyncDialogEl?.classList.add("hidden");
 }
 
 function pctText(value) {
@@ -353,9 +367,10 @@ function bindSwitchButtons() {
         loadHistory();
         const syncMessage = preSwitchSyncMessage(data.result);
         if (syncMessage) {
-          window.alert(syncMessage);
+          showSwitchSyncDialog(syncMessage);
         }
-        showNotice(`已切换到 ${data.result.label}，Codex 正在重新启动。备份：${data.result.backup}`, "good");
+        const syncNotice = syncMessage ? `${syncMessage.split("\n")[0]} ` : "";
+        showNotice(`${syncNotice}已切换到 ${data.result.label}，Codex 正在重新启动。备份：${data.result.backup}`, "good");
       } catch (err) {
         showNotice(`切换失败：${err.message}`, "bad");
         btn.disabled = false;
@@ -795,6 +810,13 @@ async function loadHistory() {
 }
 
 refreshBtn.addEventListener("click", () => loadAccounts());
+switchSyncCloseBtn?.addEventListener("click", hideSwitchSyncDialog);
+switchSyncDialogEl?.addEventListener("click", (event) => {
+  if (event.target === switchSyncDialogEl) hideSwitchSyncDialog();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") hideSwitchSyncDialog();
+});
 quotaSortBtn.addEventListener("click", () => {
   quotaSortEnabled = !quotaSortEnabled;
   renderAccounts(latestAccounts);
