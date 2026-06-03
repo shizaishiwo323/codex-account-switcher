@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
+import sys
 import tempfile
 import threading
 import time
@@ -40,6 +42,7 @@ ROOT = Path(__file__).resolve().parent
 STATIC_DIR = ROOT / "static"
 USAGE_HISTORY_PATH = ROOT / "usage_history.json"
 KEEPALIVE_STATE_PATH = ROOT / "keepalive_state.json"
+KEEPALIVE_STATUS_PATH = ROOT / "keepalive_status.json"
 USAGE_SAMPLE_INTERVAL_SECONDS = 10 * 60
 USAGE_HISTORY_SAMPLE_LIMIT = 90 * 24 * 6
 MAX_AUTH_UPLOAD_BYTES = 2 * 1024 * 1024
@@ -116,6 +119,61 @@ def current_default_account_id() -> str | None:
         return None
 
 
+def auth_status_from_error(error: object) -> dict | None:
+    text = str(error or "")
+    lower_text = text.lower()
+    auth_invalid = any(
+        marker in lower_text
+        for marker in (
+            "access token could not be refreshed",
+            "access token refresh failed",
+            "refresh token was already used",
+            "please log out and sign in again",
+            "invalid_grant",
+            "refresh_token is missing",
+        )
+    )
+    if not auth_invalid:
+        return None
+    return {
+        "status": "auth_invalid",
+        "message": "账号 refresh token 已失效，请重新登录这个账号后再刷新。",
+        "detail": text,
+    }
+
+
+def load_keepalive_status(path: Path = KEEPALIVE_STATUS_PATH) -> dict:
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {"accounts": {}}
+    if not isinstance(data, dict):
+        return {"accounts": {}}
+    accounts = data.get("accounts")
+    if not isinstance(accounts, dict):
+        accounts = {}
+    return {"accounts": accounts}
+
+
+def attach_auth_statuses(accounts: list[dict], status_payload: dict | None = None) -> None:
+    status_accounts = {}
+    if isinstance(status_payload, dict) and isinstance(status_payload.get("accounts"), dict):
+        status_accounts = status_payload["accounts"]
+    for account in accounts:
+        status = status_accounts.get(account.get("id")) if isinstance(account.get("id"), str) else None
+        if isinstance(status, dict) and status.get("status") == "auth_invalid":
+            account["auth_status"] = {
+                "status": "auth_invalid",
+                "message": status.get("message") or "账号认证已失效，请重新登录这个账号后再刷新。",
+                "detail": status.get("detail"),
+                "updated_at": status.get("updated_at"),
+            }
+            continue
+        error_status = auth_status_from_error(account.get("error"))
+        if error_status:
+            account["auth_status"] = error_status
+
+
 def account_items() -> list[dict]:
     active_account_id = current_default_account_id()
     accounts = get_accounts()
@@ -147,12 +205,16 @@ def account_items() -> list[dict]:
                 item["is_active"] = bool(active_account_id and usage.get("account_id") == active_account_id)
             except Exception as exc:
                 item["error"] = str(exc)
+                error_status = auth_status_from_error(exc)
+                if error_status:
+                    item["auth_status"] = error_status
 
     items = [items_by_id[account["id"]] for account in accounts]
     KEEPALIVE_STATE.update_auto_pauses(items)
     KEEPALIVE_STATE.attach_payloads(items)
     if KEEPALIVE_STATE.stop_paused_auto_sessions(items):
         KEEPALIVE_STATE.attach_payloads(items)
+    attach_auth_statuses(items, load_keepalive_status())
     return items
 
 
@@ -512,6 +574,15 @@ def usage_sampler_loop() -> None:
 
 
 def codex_is_running() -> bool:
+    if sys.platform == "win32":
+        result = subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq Codex.exe"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        return "Codex.exe" in result.stdout
+
     result = subprocess.run(
         ["osascript", "-e", f'application id "{CODEX_APP_BUNDLE_ID}" is running'],
         check=False,
@@ -531,6 +602,19 @@ def wait_for_codex_running(expected: bool, timeout: float = 20.0) -> bool:
 
 
 def quit_codex() -> None:
+    if sys.platform == "win32":
+        if not codex_is_running():
+            return
+        subprocess.run(
+            ["taskkill", "/IM", "Codex.exe", "/T"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if not wait_for_codex_running(False, timeout=20.0):
+            raise RuntimeError("Codex 桌面端没有在 20 秒内完全退出，请手动退出后重试")
+        return
+
     subprocess.run(
         ["osascript", "-e", f'tell application id "{CODEX_APP_BUNDLE_ID}" to quit'],
         check=False,
@@ -549,6 +633,22 @@ def run_open_command(command: list[str]) -> str | None:
 
 
 def open_codex() -> dict[str, str]:
+    if sys.platform == "win32":
+        path = Path(CODEX_APP_PATH).expanduser()
+        if path.exists():
+            os.startfile(str(path))
+            return {"command": f"start {path}", "path": str(path)}
+        result = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", "Start-Process Codex"],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            return {"command": "Start-Process Codex"}
+        error = (result.stderr or result.stdout or f"exit code {result.returncode}").strip()
+        raise RuntimeError(f"无法重新打开 Codex 桌面端: {error}")
+
     attempts = [
         ["open", "-b", CODEX_APP_BUNDLE_ID],
         ["open", str(CODEX_APP_PATH)],
@@ -572,7 +672,17 @@ def open_codex() -> dict[str, str]:
     raise RuntimeError("Codex 桌面端启动失败：" + " | ".join(errors))
 
 
-def switch_account(target: dict) -> dict:
+def skipped_auth_update_result(destination_path: Path) -> dict:
+    default_auth = load_auth(destination_path)
+    return {
+        "changed": False,
+        "skipped": True,
+        "reason": "未勾选更新认证，已跳过默认认证回写检测",
+        "current_account_id": default_auth.account_id,
+    }
+
+
+def switch_account(target: dict, *, update_current_auth: bool = False) -> dict:
     source_path = target["auth_path"].expanduser().resolve()
     destination_path = DEFAULT_AUTH_PATH.expanduser().resolve()
     if source_path == destination_path:
@@ -587,7 +697,11 @@ def switch_account(target: dict) -> dict:
 
     stamp = datetime.now().strftime("%Y%m%d-%H%M%S-%f")
     backups: list[dict] = []
-    pre_switch_sync = sync_default_auth_to_current_pool(stamp, backups)
+    pre_switch_sync = (
+        sync_default_auth_to_current_pool(stamp, backups)
+        if update_current_auth
+        else skipped_auth_update_result(destination_path)
+    )
     switch_pair = switch_backup_account_part(pre_switch_sync, str(target["id"]))
     backups.append(
         backup_auth_file(
@@ -768,7 +882,8 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError(f"未知账号: {account_id}")
             if not target.get("can_switch"):
                 raise ValueError("这个账号不能作为切换目标")
-            result = switch_account(target)
+            update_current_auth = bool(payload.get("update_auth"))
+            result = switch_account(target, update_current_auth=update_current_auth)
             USAGE_HISTORY.record_switch(result)
             accounts = sample_usage_history("switch")
             json_response(self, 200, {"ok": True, "result": result, "accounts": accounts})

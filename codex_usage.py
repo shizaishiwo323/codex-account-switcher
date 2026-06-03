@@ -142,8 +142,12 @@ def refresh_access_token(auth: CodexAuth, timeout: float = DEFAULT_HTTP_TIMEOUT)
         },
         method="POST",
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        payload = json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as exc:
+        detail = exc.read(1000).decode("utf-8", "replace")
+        raise RuntimeError(f"access token refresh failed: HTTP {exc.code}: {detail}") from exc
     access_token = payload.get("access_token")
     if not isinstance(access_token, str) or not access_token:
         raise RuntimeError("refresh response did not contain access_token")

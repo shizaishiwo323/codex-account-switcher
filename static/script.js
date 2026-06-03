@@ -115,11 +115,12 @@ function windowRemainingByLabel(usage, label) {
 }
 
 function hasEnoughSwitchQuota(usage) {
+  const thirtyDayRemaining = windowRemainingByLabel(usage, "30天");
   const fiveHourRemaining = windowRemainingByLabel(usage, "5小时");
   const weeklyRemaining = windowRemainingByLabel(usage, "1周");
-  if (weeklyRemaining === null || weeklyRemaining <= 0) return false;
-  if (fiveHourRemaining === null) return true;
-  return fiveHourRemaining > 0;
+  return [thirtyDayRemaining, weeklyRemaining, fiveHourRemaining].some(
+    (remaining) => remaining !== null && remaining > 0,
+  );
 }
 
 function quotaSortNumber(value, fallback = -1) {
@@ -170,7 +171,8 @@ function normalizedPlan(account) {
 }
 
 function accountSummary(accounts) {
-  return accounts.reduce((summary, account) => {
+  const summaryAccounts = accounts.filter((account) => account.can_switch);
+  return summaryAccounts.reduce((summary, account) => {
     const plan = normalizedPlan(account);
     summary.total += 1;
     if (plan === "plus") summary.plus += 1;
@@ -242,6 +244,20 @@ function keepaliveControlsHtml(account) {
   `;
 }
 
+function accountAuthStatusHtml(account) {
+  const status = account.auth_status;
+  if (!status || status.status !== "auth_invalid") return "";
+  const updated = Number(status.updated_at);
+  const updatedText = Number.isFinite(updated) ? ` · ${fullTime(updated)}` : "";
+  const detail = status.detail ? `<span>${escapeHtml(status.detail)}</span>` : "";
+  return `
+    <div class="auth-warning">
+      <strong>${escapeHtml(status.message || "账号认证已失效，请重新登录这个账号后再刷新。")}${updatedText}</strong>
+      ${detail}
+    </div>
+  `;
+}
+
 function cardHtml(account) {
   const usage = account.usage || {};
   const title = usage.email || usage.name || "未识别账号";
@@ -258,12 +274,20 @@ function cardHtml(account) {
   }
   const metaHtml = metaLines.map(escapeHtml).join("<br>");
   const actionTitle = switchQuotaOk
-      ? "5 小时额度和 1 周额度均可用"
-      : "5 小时额度或 1 周额度不可用，仍可手动切换";
+      ? "账号仍有可用额度"
+      : "可见额度为 0，仍可手动切换";
   const downloadHref = `/api/accounts/${encodeURIComponent(account.id)}/auth.json`;
   const downloadName = `${safeFileBase(account.id)}-auth.json`;
   const uploadButton = account.can_upload
     ? `<button class="button" type="button" data-upload-auth="${escapeHtml(account.id)}">上传认证</button>`
+    : "";
+  const updateAuthControl = account.can_switch && !account.is_active
+    ? `
+      <label class="update-auth-option">
+        <input type="checkbox" data-update-auth="${escapeHtml(account.id)}">
+        <span>更新认证</span>
+      </label>
+    `
     : "";
   const actionHtml = `
     <div class="card-actions ${account.can_upload ? "has-upload" : ""}">
@@ -273,6 +297,7 @@ function cardHtml(account) {
         ${account.is_active ? "正在使用" : "切换到此账号"}
       </button>
     </div>
+    ${updateAuthControl}
   `;
 
   return `
@@ -291,9 +316,11 @@ function cardHtml(account) {
             ${usageRow(usage.primary)}
             ${usageRow(usage.secondary)}
           </div>
+          ${accountAuthStatusHtml(account)}
           <p class="meta">${metaHtml}</p>
         ` : `
           <p class="error-text">${escapeHtml(account.error || "未知错误")}</p>
+          ${accountAuthStatusHtml(account)}
           ${account.path ? `<p class="meta">路径：${escapeHtml(account.path)}</p>` : ""}
         `}
       </div>
@@ -334,6 +361,7 @@ function preSwitchSyncMessage(result) {
       sync.pool_path ? `账号池路径：${sync.pool_path}` : "",
     ].filter(Boolean).join("\n");
   }
+  if (sync.skipped) return "";
   if (sync.synced_to) {
     return [
       "当前认证文件未更新。",
@@ -348,13 +376,14 @@ function bindSwitchButtons() {
   document.querySelectorAll("[data-switch]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const id = btn.getAttribute("data-switch");
+      const updateAuth = document.querySelector(`[data-update-auth="${CSS.escape(id)}"]`)?.checked || false;
       btn.disabled = true;
-      showNotice("正在关闭 Codex、备份当前认证并切换账号...");
+      showNotice(updateAuth ? "正在检测并更新认证，然后切换账号..." : "正在关闭 Codex、备份当前认证并切换账号...");
       try {
         const res = await fetch("/api/switch", {
           method: "POST",
           headers: {"Content-Type": "application/json"},
-          body: JSON.stringify({id}),
+          body: JSON.stringify({id, update_auth: updateAuth}),
         });
         const data = await res.json();
         if (!res.ok || !data.ok) {

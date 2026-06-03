@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import re
 import subprocess
 import tempfile
 import time
@@ -16,6 +18,62 @@ VALID_MODES = {MODE_AUTO, MODE_ON, MODE_OFF}
 
 def tmux_session_name(account_id: str) -> str:
     return f"codex-{account_id}"
+
+
+def trusted_workdir() -> Path:
+    return Path(os.environ.get("CODEX_TRUSTED_WORKDIR", str(Path.home()))).expanduser().resolve()
+
+
+def ensure_trusted_project(codex_home: Path, project_dir: Path | None = None) -> None:
+    config_path = codex_home / "config.toml"
+    trusted_dir = trusted_workdir() if project_dir is None else project_dir.expanduser().resolve()
+    header = f'[projects."{trusted_dir}"]'
+    try:
+        text = config_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        text = ""
+
+    lines = text.splitlines()
+    output: list[str] = []
+    in_section = False
+    found_section = False
+    section_had_trust = False
+    changed = False
+    section_re = re.compile(r"^\s*\[.*\]\s*$")
+
+    for line in lines:
+        if line.strip() == header:
+            in_section = True
+            found_section = True
+            section_had_trust = False
+            output.append(line)
+            continue
+        if in_section and section_re.match(line):
+            if not section_had_trust:
+                output.append('trust_level = "trusted"')
+                changed = True
+            in_section = False
+        if in_section and re.match(r"^\s*trust_level\s*=", line):
+            if line.strip() != 'trust_level = "trusted"':
+                output.append('trust_level = "trusted"')
+                changed = True
+            else:
+                output.append(line)
+            section_had_trust = True
+            continue
+        output.append(line)
+
+    if found_section and in_section and not section_had_trust:
+        output.append('trust_level = "trusted"')
+        changed = True
+    if not found_section:
+        if output and output[-1].strip():
+            output.append("")
+        output.extend([header, 'trust_level = "trusted"'])
+        changed = True
+
+    if changed:
+        config_path.write_text("\n".join(output).rstrip() + "\n", encoding="utf-8")
 
 
 def weekly_window(account: dict[str, Any]) -> dict[str, Any] | None:
@@ -230,6 +288,8 @@ def start_keepalive_session(account: dict[str, Any]) -> None:
     session = tmux_session_name(account_id)
     if session in tmux_sessions():
         return
+    trusted_dir = trusted_workdir()
+    ensure_trusted_project(Path(codex_home), trusted_dir)
     subprocess.run(
         [
             "tmux",
@@ -237,7 +297,7 @@ def start_keepalive_session(account: dict[str, Any]) -> None:
             "-d",
             "-s",
             session,
-            f"export CODEX_HOME='{codex_home}'; exec codex",
+            f"export CODEX_HOME='{codex_home}'; exec codex --cd '{trusted_dir}'",
         ],
         check=True,
         capture_output=True,

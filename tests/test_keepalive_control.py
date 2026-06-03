@@ -1,11 +1,15 @@
 import time
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
 from keepalive_control import (
     MODE_AUTO,
     MODE_OFF,
     MODE_ON,
     account_keepalive_payload,
+    start_keepalive_session,
     update_auto_pause_from_usage,
 )
 
@@ -98,6 +102,31 @@ class KeepaliveControlTests(unittest.TestCase):
         self.assertEqual(on_payload["reason"], "manual_on")
         self.assertFalse(off_payload["desired"])
         self.assertEqual(off_payload["reason"], "manual_off")
+
+    def test_start_keepalive_session_trusts_and_uses_shared_workdir(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            codex_home = root / ".codex-alpha"
+            codex_home.mkdir()
+            auth_path = codex_home / "auth.json"
+            auth_path.write_text("{}", encoding="utf-8")
+            trusted_dir = (root / "workspace").resolve()
+            trusted_dir.mkdir()
+            account = {"id": "alpha", "auth_path": str(auth_path)}
+
+            with (
+                patch("keepalive_control.tmux_sessions", return_value=set()),
+                patch("keepalive_control.subprocess.run") as run,
+                patch.dict("os.environ", {"CODEX_TRUSTED_WORKDIR": str(trusted_dir)}),
+            ):
+                start_keepalive_session(account)
+
+            command = run.call_args.args[0]
+            self.assertEqual(command[:5], ["tmux", "new-session", "-d", "-s", "codex-alpha"])
+            self.assertIn(f"--cd '{trusted_dir}'", command[-1])
+            config = (codex_home / "config.toml").read_text(encoding="utf-8")
+            self.assertIn(f'[projects."{trusted_dir}"]', config)
+            self.assertIn('trust_level = "trusted"', config)
 
 
 if __name__ == "__main__":

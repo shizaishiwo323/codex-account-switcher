@@ -8,7 +8,7 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/scripts/ensure_codex_keepalive.sh</string>
+    <string>/Users/wangbin/Documents/Codex/codex-account-switcher/scripts/ensure_codex_keepalive.sh</string>
   </array>
 
   <key>RunAtLoad</key>
@@ -18,12 +18,12 @@
   <integer>300</integer>
 
   <key>WorkingDirectory</key>
-  <string>/Users/wangbin/Documents/Codex/任意任务/codex-account-switcher</string>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher</string>
 
   <key>StandardOutPath</key>
-  <string>/Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/logs/launchd.out.log</string>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/launchd.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/logs/launchd.err.log</string>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/launchd.err.log</string>
 </dict>
 </plist>

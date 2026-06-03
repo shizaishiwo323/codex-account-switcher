@@ -7,30 +7,38 @@
 - 查询默认账号和仓库池账号的 Codex 用量
 - 显示账号邮箱、Plus/Plan、5 小时剩余额度、1 周剩余额度和重置时间
 - 一键切换账号
-- 切换账号前会检查当前默认认证属于哪个仓库池账号；如默认认证更新过，会先备份默认认证和原账号池认证，再把默认认证回写到原账号池
+- 账号卡片可勾选“更新认证”；勾选后切换前会检查当前默认认证属于哪个仓库池账号，如默认认证更新过，会先备份默认认证和原账号池认证，再把默认认证回写到原账号池
 - 支持把下载到的 `auth.json` 上传覆盖到指定仓库池账号；覆盖前会先比对，相同则跳过，不同则备份目标文件和上传文件
 - 网页端控制每个仓库池账号的后台保活：自动、启动、停止
 - 保留按 1 周额度自动暂停保活的代码开关；当前默认关闭，开机会启动所有未手动停止的账号
 - 切换时自动关闭 Codex 桌面端
-- 切换前自动备份当前默认认证文件；如果发生默认认证回写账号池，也会同时备份回写前的两边文件
-- 覆盖 `/Users/wangbin/.codex/auth.json`
+- 切换前自动备份当前默认认证文件；只有勾选“更新认证”并发生默认认证回写账号池时，才会同时备份回写前的两边文件
+- 覆盖当前用户默认 Codex 认证，例如 macOS 的 `/Users/wangbin/.codex/auth.json` 或 Windows 的 `C:\Users\imgw\.codex\auth.json`
 - 切换后重新打开 Codex 桌面端
 
 ## 默认账号路径
 
 ```python
-DEFAULT_AUTH_PATH = Path("/Users/wangbin/.codex/auth.json")
+DEFAULT_AUTH_PATH = Path.home() / ".codex" / "auth.json"
 ```
 
 ## 仓库池路径
 
-网页会自动扫描 `/Users/wangbin` 下所有名字形如 `.codex-*` 且包含 `auth.json` 的目录，例如：
+网页会自动扫描当前用户 home 下所有名字形如 `.codex-*` 且包含 `auth.json` 的目录，例如：
 
 ```python
 Path("/Users/wangbin/.codex-shizaishiwo0/auth.json")
 Path("/Users/wangbin/.codex-shizaishiwo123/auth.json")
 Path("/Users/wangbin/.codex-shizaishiwo323/auth.json")
 Path("/Users/wangbin/.codex-zshi0509/auth.json")
+Path("C:/Users/imgw/.codex-riqu1/auth.json")
+```
+
+如果需要固定扫描目录，可以设置 `CODEX_ACCOUNT_SEARCH_ROOT`。Windows 上可显式指定：
+
+```powershell
+$env:CODEX_ACCOUNT_SEARCH_ROOT = "C:\Users\imgw"
+python app.py
 ```
 
 ## 新增仓库池账号
@@ -50,6 +58,10 @@ CODEX_HOME=$HOME/.codex-zshi0509 codex login
 
 [MULTI_ACCOUNT_KEEPALIVE.md](MULTI_ACCOUNT_KEEPALIVE.md)
 
+Windows 专用指令见：
+
+[MULTI_ACCOUNT_KEEPALIVE_WINDOWS.md](MULTI_ACCOUNT_KEEPALIVE_WINDOWS.md)
+
 如果需要开机自动检测并挂起所有 `.codex-*` 仓库池账号，见：
 
 [CODEX_KEEPALIVE_LAUNCHD.md](CODEX_KEEPALIVE_LAUNCHD.md)
@@ -65,6 +77,14 @@ CODEX_HOME=$HOME/.codex-zshi0509 codex login
 ## 运行
 
 ```bash
+python app.py
+```
+
+Windows 可指定扫描目录和端口：
+
+```powershell
+$env:CODEX_ACCOUNT_SEARCH_ROOT = "C:\Users\imgw"
+$env:CODEX_SWITCHER_PORT = "8765"
 python app.py
 ```
 

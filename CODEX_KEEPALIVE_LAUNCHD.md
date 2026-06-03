@@ -24,7 +24,21 @@ codex-shizaishiwo323
 codex-zshi0509
 ```
 
-每个会话里都会用对应的 `CODEX_HOME` 启动 `codex`。
+每个会话里都会用对应的 `CODEX_HOME` 启动 `codex`，并固定工作目录为 `/Users/wangbin`：
+
+```bash
+export CODEX_HOME=/Users/wangbin/.codex-shizaishiwo1223
+codex --cd /Users/wangbin
+```
+
+脚本启动前会自动在每个仓库池账号的 `config.toml` 里写入：
+
+```toml
+[projects."/Users/wangbin"]
+trust_level = "trusted"
+```
+
+这样新账号第一次后台启动时也不会卡在工作目录授权确认。
 
 ## 保活策略
 
@@ -36,10 +50,20 @@ codex-zshi0509
 
 `keepalive_state.json` 是本地运行状态文件，不提交到仓库。
 
+脚本还会在每天本地时间 00 点这一小时内，对每个正在运行且策略允许的 `.codex-*` 仓库池 tmux 会话发送一次：
+
+```text
+你好
+```
+
+发送状态记录在 `keepalive_ping_state.json`，同一天重复运行脚本不会重复发送。默认账号 `/Users/wangbin/.codex` 不会被扫描，也不会被发送保活消息。
+
+如果某个仓库池账号的 `auth.json` 缺失、JSON 损坏，或明显缺少 Codex token/API key 字段，脚本会跳过这个账号并写日志，避免反复拉起马上失败的 tmux 会话。
+
 ## 手动运行一次
 
 ```bash
-/Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/scripts/ensure_codex_keepalive.sh
+/Users/wangbin/Documents/Codex/codex-account-switcher/scripts/ensure_codex_keepalive.sh
 ```
 
 ## 查看是否已挂起
@@ -51,7 +75,7 @@ tmux list-sessions
 或者查看脚本日志：
 
 ```bash
-tail -n 80 /Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/logs/codex-keepalive.log
+tail -n 80 /Users/wangbin/Documents/Codex/codex-account-switcher/logs/codex-keepalive.log
 ```
 
 ## 开机自动运行
@@ -66,7 +90,7 @@ launchd/com.shizaishiwo.codex-keepalive.plist
 
 ```bash
 mkdir -p ~/Library/LaunchAgents
-cp /Users/wangbin/Documents/Codex/任意任务/codex-account-switcher/launchd/com.shizaishiwo.codex-keepalive.plist ~/Library/LaunchAgents/com.shizaishiwo.codex-keepalive.plist
+cp /Users/wangbin/Documents/Codex/codex-account-switcher/launchd/com.shizaishiwo.codex-keepalive.plist ~/Library/LaunchAgents/com.shizaishiwo.codex-keepalive.plist
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.shizaishiwo.codex-keepalive.plist
 launchctl kickstart -k gui/$(id -u)/com.shizaishiwo.codex-keepalive
 ```
