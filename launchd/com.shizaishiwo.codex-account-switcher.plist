@@ -3,27 +3,27 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.shizaishiwo.codex-keepalive</string>
+  <string>com.shizaishiwo.codex-account-switcher</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Users/wangbin/Documents/Codex/codex-account-switcher/scripts/ensure_codex_keepalive.sh</string>
+    <string>/Users/wangbin/Documents/Codex/codex-account-switcher/scripts/run_codex_account_switcher_app.sh</string>
   </array>
 
   <key>RunAtLoad</key>
   <true/>
 
-  <key>StartInterval</key>
-  <integer>300</integer>
+  <key>KeepAlive</key>
+  <true/>
 
   <key>WorkingDirectory</key>
   <string>/Users/wangbin/Documents/Codex/codex-account-switcher</string>
 
   <key>StandardOutPath</key>
-  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/launchd.out.log</string>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/account-switcher.out.log</string>
 
   <key>StandardErrorPath</key>
-  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/launchd.err.log</string>
+  <string>/Users/wangbin/Documents/Codex/codex-account-switcher/logs/account-switcher.err.log</string>
 </dict>
 </plist>
